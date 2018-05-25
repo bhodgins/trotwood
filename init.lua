@@ -10,6 +10,7 @@ local scheduler = function()
 	local self    = {}
 	local outbox  = {}
 	local actors  = {}
+	local named   = {}
 	local ready   = {}
 
 	-- PID tracking:
@@ -92,22 +93,28 @@ local scheduler = function()
 
 	-- Peeks at the top message in the queue:
 	function self.mailpeek()
-		if #outbox ~= 0 then return outbox[current][1] else nil end
+		if #outbox ~= 0 then return outbox[current][1] else return nil end
 	end
 
 	function self.recv()
-		if self.inbox() ~= 0 then
-			return ':ok', table.remove(outbox[current], 1)
-		end
+		coroutine.yield()
 
-		cprint("Can't receive message in pid " .. pid .. ": Empty outbox")
-		return ':error'
+		--[[
+			It is possible for a process to be force-resumed using scheduler.enqueue()
+			If this happens, and we are in the middle of a recv() call, then we might
+			assume that some process wants to break an existing recv() call:
+		--]]
+		if self.inbox() == 0 then return ':error', 'Wakeup: broke out of recv loop' end
+
+		return ':ok', table.remove(outbox[current], 1)
 	end
 
-	function self.spawn(fn)
+	function self.spawn(fn, name)
 		local co = coroutine.create(fn)
 
 		local new_pid = _find_pid() -- Process needs a new PID
+		if name ~= nil then named[name] = new_pid
+
 		actors[new_pid] = co
 		return ':ok', new_pid
 	end
@@ -121,6 +128,13 @@ local scheduler = function()
 			cprint		= cprint,
 			callback      = callback,
 		}
+
+		-- Process callbacks can be easier this way:
+		setmetatable(sandbox, {
+			__index = function()
+
+			end
+		})
 
 		local chunk, errmsg = load(strfn, 'test', nil, sandbox)
 		if chunk == nil then
@@ -152,38 +166,27 @@ spin()
 
 -- Init
 
-local vfs = [==[
-callback.register_sync(':open', function(state, path)
+local mount_registry = [==[
+-- This module handles registered mountpoints.
 
-end)
+callback.register_sync(':mount', function(state, filesystem_agent, path)
+	if state['mount_point'][path] ~= nil then
+		return ':error', 'A filesystem has already been mounted at ' .. path
+	end
 
-callback.register_sync(':close', function(state, fd)
-
-end)
-
-callback.register_sync(':read', function(state, fd, length)
-
-end)
-
-callback.register_sync(':write', function(state, fd, data, length)
-
-end)
-
-callback.register_sync(':register_fs', function(state, filesystem, pid)
-
-end)
-
-callback.register_sync(':deregister_fs', function(state, pid)
-
-end)
-
-callback.register_sync(':mount', function(state, filesystem, path)
-
+	state['mount_point'][path] = filesystem_agent
+	return ':ok'
 end)
 
 callback.register_sync(':umount', function(state, path)
+	if state['mount_point'][path] == nil then
+		return ':error', 'No filesystem mounted at ' .. path
+	end
 
-end)
+	state['mount_point'][path] = filesystem_agent
+
+	return ':ok'
+--end)
 
 callback.spin()
 ]==]
@@ -213,35 +216,42 @@ function callback.spin()
 	local callbacks	= {}
 
 	function callback.register_async(name, fn)
-		if callbacks[name] == nil then
-			callbacks[name] = fn
-			return ':ok'
-		else
+		if callbacks[name] ~= nil then
 			return ':error', 'callback already exists'
 		end
+
+		callbacks[name] = { fn = fn }
+		return ':ok'
 	end
 
 	function callback.register_sync(name, fn)
-			if callbacks[name] == nil then
-			callbacks[name] = fn
-			return ':ok'
-		else
-			return ':error', 'callback already exists'
-		end
+		local ok, errmsg = callback.register_async(name, fn)
+		if ok == ':error' then return ok, errmsg end
+		callbacks[name][sync] = true
+		return ':ok'
 	end
 
 	while true do
-		local maybe_call = scheduler.mailpeek()
-		if type(maybe_call) == 'table' then
-			if maybe_call[0] == ':callback' then
-				-- This is probably a callback. Proceed:
-				scheduler.recv() -- Discard the top message, we aleady have it.
-				--TODO
+		local msg = scheduler.recv()
+		if type(msg) == 'table' then
+			local hint     = msg[1]
+			local callback = msg[2]
+			local args     = msg[3] or {}
+			local source   = msg[4]
+			local tag      = msg[5]
 
+			if hint == ':callback' then
+				-- This is probably a callback. Proceed:
+				if callbacks[callback] ~= nil then
+					local retvals = table.pack( callbacks.callback['fn'](state, table.unpack(args)) )
+
+					-- Syncronous callbacks need return values:
+					if source ~= nil and callbacks.callback['sync'] ~= nil then
+						scheduler.send( source, {':callback-return', self(), callback, tag, retvals} )
+					end
+				end
 			end
 		end
-
-		-- Otherwise, it is not, and should be left alone.
-		coroutine.yield()
 	end
+
 end
