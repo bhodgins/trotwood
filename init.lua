@@ -7,11 +7,12 @@ local callback = {} -- Forward declare for callback routines
 -- Scheduler --
 
 local scheduler = function()
-	local self    = {}
-	local outbox  = {}
-	local actors  = {}
-	local named   = {}
-	local ready   = {}
+	local self        = {}
+	local outbox      = {}
+	local actors      = {}
+	local named       = {}
+	local ready       = {}
+	local subscribers = {}
 
 	-- PID tracking:
 	local free_pids		= {}
@@ -33,8 +34,85 @@ local scheduler = function()
 		return next_pid / process_max
 	end
 
+	function self.send(pid, ...)
+		local arg = table.pack(...)
+
+		if actors[pid] ~= nil then
+			table.insert(outbox[pid], arg)
+			self.enqueue(pid)
+
+			return ':ok'
+		end
+
+		cprint("Can't send message to pid " .. pid .. ": No such pid")
+		return ':error'
+	end
+
+	function self.enqueue(pid)
+		if actors[pid] ~= nil then
+			table.insert(ready, pid)
+			return ':ok'
+		end
+
+		cprint("Can't enqueue pid " .. pid .. ": No such pid")
+		return ':error'
+	end
+
+	-- External event subscription
+	function self.subscribe(pid, event)
+		if subscribers[event] == nil then subscribers[event] = {} end
+
+		-- Make sure we're not already subscribed:
+		for _, subscriber in ipairs(subscribers[event]) do
+			if subscriber == pid then
+				cprint("Can't subscribe to event" .. event .. ": Already subscribed")
+				return ':error'
+			end
+		end
+
+		table.insert(subscribers[event], current)
+	end
+
+	-- External event unsubscription
+	function self.unsubscribe(pid, event)
+		if subscribers[event] == nil then
+			goto not_subscribed
+		end
+
+		-- We need to find the index it may be located at:
+		for index, subscriber in ipairs(subscribers[event]) do
+			if subscriber == pid then
+				table.remove(subscriber[event], index)
+				return ':ok'
+			end
+		end
+
+		::not_subscribed::
+		return ':error', 'not subscribed'
+	end
+
 	local function _run()
-		local ev = computer.pullSignal(0)
+		--[[
+			As much as it may not seem like it, events and messaging is top priority
+			in such a system. It is much more important to ensure that messages are
+			delivered so that they can be handled, rather than encourage processes to
+			work for long periods of time to do more work at once. Try to keep your
+			processing time short, so that the responsiveness of the system increases.
+		]]
+
+		local ev = table.pack(computer.pullSignal(0)) or {} -- Check for events
+		local ev_name = table.remove(ev, 1) or ''
+
+		if subscribers[ev_name] ~= nil then
+			--[[ In theory we just have a subscriber list. I thought of having an
+			actor take care of event subscriptions but it then the performance
+			becomes a linear vertical translation f(n) = O(n) + alpha, where alpha is
+			the average runtime of the message passing and subscription lookup. --]]
+
+			for _, subscriber in ipairs(subscribers[ev_name]) do
+				self.send(subscriber, ':ev', ev_name, table.unpack(ev))
+			end
+		end
 
 		if not next(actors) then
 			cprint "Kernel panic: No more actors!"
@@ -68,25 +146,8 @@ local scheduler = function()
 
 	function self.self() return current end
 
-	function self.enqueue(pid)
-		if actors[pid] ~= nil then
-			table.insert(ready, pid)
-			return ':ok'
-		end
-
-		cprint("Can't enqueue pid " .. pid .. ": No such pid")
-		return ':error'
-	end
-
-	function self.send(pid, message)
-		if actors[pid] ~= nil then
-			table.insert(outbox[pid], message)
-			return ':ok'
-		end
-
-		cprint("Can't send message to pid " .. pid .. ": No such pid")
-		return ':error'
-	end
+	local function subscribe(event)   return self.subscribe(current, event)   end
+	local function unsubscribe(event) return self.unsubscribe(current, event) end
 
 	-- Returns the current number of messages in actors' mailbox
 	function self.inbox() return #outbox[current] end
@@ -113,20 +174,23 @@ local scheduler = function()
 		local co = coroutine.create(fn)
 
 		local new_pid = _find_pid() -- Process needs a new PID
-		if name ~= nil then named[name] = new_pid
+		outbox[new_pid] = {}        -- Setup mailbox
 
+		if name ~= nil then named[name] = new_pid end
 		actors[new_pid] = co
 		return ':ok', new_pid
 	end
 
 	function self.espawn(strfn)
 		local sandbox = {
-			table			= table,
-			math			= math,
-			scheduler	= self,
-			coroutine	= coroutine,
-			cprint		= cprint,
-			callback      = callback,
+			table			  = table,
+			math			  = math,
+			scheduler	  = self,
+			subscribe   = subscribe,
+			unsubscribe = unsubscribe,
+			coroutine	  = coroutine,
+			cprint		  = cprint,
+			callback    = callback,
 		}
 
 		-- Process callbacks can be easier this way:
@@ -144,58 +208,17 @@ local scheduler = function()
 		return self.spawn(chunk)
 	end
 
-	function self.run(init)
-		return _run()
-	end
+	function self.run() return _run() end
 
 	return self
 end
 
--- KPrint --
-
-local logger = [==[
-local function cprinter(msg) cprint(msg) end
-local log_handler = cprinter -- For now
-
-callback.register(':log', function(message)
-	log_handler(message)
-end)
-
-spin()
-]==]
-
--- Init
-
-local mount_registry = [==[
--- This module handles registered mountpoints.
-
-callback.register_sync(':mount', function(state, filesystem_agent, path)
-	if state['mount_point'][path] ~= nil then
-		return ':error', 'A filesystem has already been mounted at ' .. path
-	end
-
-	state['mount_point'][path] = filesystem_agent
-	return ':ok'
-end)
-
-callback.register_sync(':umount', function(state, path)
-	if state['mount_point'][path] == nil then
-		return ':error', 'No filesystem mounted at ' .. path
-	end
-
-	state['mount_point'][path] = filesystem_agent
-
-	return ':ok'
---end)
-
-callback.spin()
-]==]
-
 local init = [==[
--- Bootstrap logging:
-ok, pid = scheduler.espawn(logger)
-if ok == ':error' then
-	cprint('Error loading logger: ' .. pid)
+subscribe("key_down")
+
+while true do
+	local ok, msg = scheduler.recv()
+	cprint(msg)
 end
 ]==]
 
