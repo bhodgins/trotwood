@@ -28,6 +28,7 @@ local scheduler = function()
 		if #free_pids == 0 then
 			-- No PIDs available, let's make one:
 			table.insert(free_pids, pid_cap + 1)
+			pid_cap = pid_cap + 1
 		end
 
 		next_pid = table.remove(free_pids, 1)
@@ -174,6 +175,7 @@ local scheduler = function()
 		local co = coroutine.create(fn)
 
 		local new_pid = _find_pid() -- Process needs a new PID
+		cprint('starting process with pid ' .. new_pid)
 		outbox[new_pid] = {}        -- Setup mailbox
 
 		if name ~= nil then named[name] = new_pid end
@@ -191,14 +193,16 @@ local scheduler = function()
 			coroutine	  = coroutine,
 			cprint		  = cprint,
 			callback    = callback,
+			component   = component,
 		}
 
 		-- Process callbacks can be easier this way:
+		--[[
 		setmetatable(sandbox, {
 			__index = function()
 
 			end
-		})
+		}) --]]
 
 		local chunk, errmsg = load(strfn, 'test', nil, sandbox)
 		if chunk == nil then
@@ -214,11 +218,31 @@ local scheduler = function()
 end
 
 local init = [==[
-subscribe("key_down")
+-- (PRE-INIT)
 
-while true do
-	local ok, msg = scheduler.recv()
-	cprint(msg)
+local eeprom = component.proxy((component.list("eeprom"))())
+local boot_uuid = eeprom.getData()
+cprint("boot device hint is: " .. boot_uuid)
+
+-- Try and locate tboot.lua:
+local fs = component.proxy(boot_uuid)
+
+if not fs.exists("/tboot.lua") then return end
+local fh = fs.open("/tboot.lua")
+
+local chunk    = ""
+local contents = ""
+
+while chunk ~= nil do
+	contents = contents .. chunk
+	chunk = fs.read(fh, 8192)
+	scheduler.enqueue(scheduler.self())
+	coroutine.yield()
+end fs.close(fh)
+
+local ok, pid = scheduler.espawn(contents)
+if ok == ':ok' then
+	scheduler.enqueue(pid)
 end
 ]==]
 
