@@ -1,304 +1,192 @@
 if cprint == nil then cprint = function() end end	-- OC compat
 if print  ~= nil then cprint = print end         	-- Testing outside of OC
 if computer == nil then computer = { pullSignal = function() end } end
+local yield = coroutine.yield -- shorthand
 
-local callback = {} -- Forward declare for callback routines
+-- SCHEDULER --
 
--- Scheduler --
+local scheduler = {}
+local errstr    = {} -- Error string table
 
-local scheduler = function()
-	local self        = {}
-	local outbox      = {}
-	local actors      = {}
-	local named       = {}
-	local ready       = {}
-	local subscribers = {}
+-- Errors and constant like things:
+local YC_QUIT = 100
+local YC_SEND = 110
+local YC_WUP  = 120
+local YC_RECV = 130
+local YC_SPWN = 140
+local YC_SUB  = 150
+local YC_USUB = 160
 
-	-- PID tracking:
-	local free_pids		= {}
-	local pid_cap		= 0
-	local current 		= nil
-	local process_max	= 1000
+local E_SCH_PIDNOEXIST = 100
+local E_SCH_NOACTORS   = 100
+errstr[E_SCH_PIDNOEXIST] = "No such PID"
+errstr[E_SCH_NOACTORS]   = "All actors have halted"
 
-	-- Returns an avilable PID either from existing available ones or new
-	-- ones by lifting the PID cap:
-	local function _find_pid()
-		local next_pid = 0
+--[[
+Yield calls provide a means to communicate with the scheduler without having
+access to the scheduler's environment directly. It also helps ensure that
+any program that does anything 'useful' is less likely to block execution of
+other actors. There are only 7 primitive yield calls: quit(), send(), recv(),
+wake(), sub(), unsub(), and spawn():
 
-		if #free_pids == 0 then
-			-- No PIDs available, let's make one:
-			table.insert(free_pids, pid_cap + 1)
-			pid_cap = pid_cap + 1
-		end
+quit(): nil :: Decomposes an actor
+send(pid:number, ...): nil :: Sends a message to an actor
+recv(): ... :: Receives a message rom an actor
+wake(pid:number): nil :: Wakes up an actor.
+sub(event:string, filter:function) :: Subscribe to an event, filter optional
+unsub(event:string) :: Unsubscribes from an event
+]]
+local yc_quit   = function()         yield(YC_QUIT)           end
+local yc_send   = function(pid, ...) yield(YC_SEND, pid, ...) end
+local yc_wake   = function(pid)      yield(YC_WUP,  pid)      end
+local yc_recv   = function()         yield(YC_RECV)           end
+local yc_sub    = function(event)    yield(YC_SUB, event, fn) end
+local yc_unsub  = function(event)    yield(YC_USUB, event)    end
+local yc_spawn  = function(code, sopts, ...) yield(YC_SPWN, code, sopts, ...) end
 
-		next_pid = table.remove(free_pids, 1)
-		return next_pid / process_max
-	end
-
-	function self.send(pid, ...)
-		local arg = table.pack(...)
-
-		if actors[pid] ~= nil then
-			table.insert(outbox[pid], arg)
-			self.enqueue(pid)
-
-			return ':ok'
-		end
-
-		cprint("Can't send message to pid " .. pid .. ": No such pid")
-		return ':error'
-	end
-
-	function self.enqueue(pid)
-		if actors[pid] ~= nil then
-			table.insert(ready, pid)
-			return ':ok'
-		end
-
-		cprint("Can't enqueue pid " .. pid .. ": No such pid")
-		return ':error'
-	end
-
-	-- External event subscription
-	function self.subscribe(pid, event)
-		if subscribers[event] == nil then subscribers[event] = {} end
-
-		-- Make sure we're not already subscribed:
-		for _, subscriber in ipairs(subscribers[event]) do
-			if subscriber == pid then
-				cprint("Can't subscribe to event" .. event .. ": Already subscribed")
-				return ':error'
-			end
-		end
-
-		table.insert(subscribers[event], current)
-	end
-
-	-- External event unsubscription
-	function self.unsubscribe(pid, event)
-		if subscribers[event] == nil then
-			goto not_subscribed
-		end
-
-		-- We need to find the index it may be located at:
-		for index, subscriber in ipairs(subscribers[event]) do
-			if subscriber == pid then
-				table.remove(subscriber[event], index)
-				return ':ok'
-			end
-		end
-
-		::not_subscribed::
-		return ':error', 'not subscribed'
-	end
-
-	local function _run()
-		--[[
-			As much as it may not seem like it, events and messaging is top priority
-			in such a system. It is much more important to ensure that messages are
-			delivered so that they can be handled, rather than encourage processes to
-			work for long periods of time to do more work at once. Try to keep your
-			processing time short, so that the responsiveness of the system increases.
-		]]
-
-		local ev = table.pack(computer.pullSignal(0)) or {} -- Check for events
-		local ev_name = table.remove(ev, 1) or ''
-
-		if subscribers[ev_name] ~= nil then
-			--[[ In theory we just have a subscriber list. I thought of having an
-			actor take care of event subscriptions but it then the performance
-			becomes a linear vertical translation f(n) = O(n) + alpha, where alpha is
-			the average runtime of the message passing and subscription lookup. --]]
-
-			for _, subscriber in ipairs(subscribers[ev_name]) do
-				self.send(subscriber, ':ev', ev_name, table.unpack(ev))
-			end
-		end
-
-		if not next(actors) then
-			cprint "Kernel panic: No more actors!"
-			return
-		end
-
-		if next(ready) then
-			current = table.remove(ready, 1)
-			local co = actors[current]
-			local status, errmsg = coroutine.resume(co, self)
-			if status == false then
-				cprint(errmsg)
-			end
-
-			-- Check up on the coroutine's status:
-			if coroutine.status(co) == 'dead' then
-				cprint("Process " .. current .. " quit unexpectedly (hanged up)")
-
-				-- Clean up:
-				table.insert(free_pids, current) -- PID is now free
-				actors[current] = nil
-
-				-- TODO: Send an event that the process quit
-			end
-		end
-
-		return _run()
-	end
-
-	-- Public facing functions:
-
-	function self.self() return current end
-
-	local function subscribe(event)   return self.subscribe(current, event)   end
-	local function unsubscribe(event) return self.unsubscribe(current, event) end
-
-	-- Returns the current number of messages in actors' mailbox
-	function self.inbox() return #outbox[current] end
-
-	-- Peeks at the top message in the queue:
-	function self.mailpeek()
-		if #outbox ~= 0 then return outbox[current][1] else return nil end
-	end
-
-	function self.recv()
-		coroutine.yield()
-
-		--[[
-			It is possible for a process to be force-resumed using scheduler.enqueue()
-			If this happens, and we are in the middle of a recv() call, then we might
-			assume that some process wants to break an existing recv() call:
-		--]]
-		if self.inbox() == 0 then return ':error', 'Wakeup: broke out of recv loop' end
-
-		return ':ok', table.remove(outbox[current], 1)
-	end
-
-	function self.spawn(fn, name)
-		local co = coroutine.create(fn)
-
-		local new_pid = _find_pid() -- Process needs a new PID
-		cprint('starting process with pid ' .. new_pid)
-		outbox[new_pid] = {}        -- Setup mailbox
-
-		if name ~= nil then named[name] = new_pid end
-		actors[new_pid] = co
-		return ':ok', new_pid
-	end
-
-	function self.espawn(strfn)
-		local sandbox = {
-			table			  = table,
-			math			  = math,
-			scheduler	  = self,
-			subscribe   = subscribe,
-			unsubscribe = unsubscribe,
-			coroutine	  = coroutine,
-			cprint		  = cprint,
-			callback    = callback,
-			component   = component,
-		}
-
-		-- Process callbacks can be easier this way:
-		--[[
-		setmetatable(sandbox, {
-			__index = function()
-
-			end
-		}) --]]
-
-		local chunk, errmsg = load(strfn, 'test', nil, sandbox)
-		if chunk == nil then
-			return ':error', 'cannot load chunk: ' .. errmsg
-		end
-
-		return self.spawn(chunk)
-	end
-
-	function self.run() return _run() end
-
-	return self
+--[[ create_environment :: Returns a new enviroment sandbox for new actors:
+type:       Internal
+params:     nil
+returns:    senvironment:table ]]
+local function create_environment()
+  return {
+    os          = os,               table			  = table,
+    math			  = math,             spawn       = yc_spawn,
+    coroutine	  = coroutine,        cprint		  = cprint,
+    callback    = callback,         component   = component,
+    quit        = yc_quit,          send        = yc_send,
+    wake        = yc_wake,          recv        = yc_recv,
+    sub         = yc_sub,           ubsub       = yc_ubsub,
+    self        = 0,                yield       = yield,
+  }
 end
 
-local init = [==[
--- (PRE-INIT)
+--[[ find_pid :: Finds an available PID
+type:       Internal
+params:     state:table
+returns:    pid:number ]]
+local function find_pid(state)
+  if next(state.free_pids) ~= nil then -- Check released PIDs first
+    return ':ok', table.remove(state.free_pids, 1)
+  end
+  -- Return a new PID, if the cap is not met:
+  if state.pid_max == state.last_new_pid then return ':error', E_SCH_NOPIDS end
+  return ':ok', state.last_new_pid + 1
+end
 
-local eeprom = component.proxy((component.list("eeprom"))())
-local boot_uuid = eeprom.getData()
-cprint("boot device hint is: " .. boot_uuid)
+local function co_handle_resume(state, pid, co_result, ...)
+  yield_call = table.pack(...)
+  cprint(...)
+  -- TODO
+end
 
--- Try and locate tboot.lua:
-local fs = component.proxy(boot_uuid)
+-- PUBLIC CALLS --
 
-if not fs.exists("/tboot.lua") then return end
-local fh = fs.open("/tboot.lua")
+--[[ build :: Builds and returns a new scheduler state table
+type:       External
+params:     max pid*:number, tamra_port*:number
+returns:    scheduler:table ]]
+function scheduler.build(pid_max, tamra_port)
+  return {
+    actors          = {},
+    ready           = {},
+    free_pids       = {},
+    last_new_pid    = 0,
+    pid_max         = pid_max or 1000,
 
-local chunk    = ""
-local contents = ""
+    -- Trotwood Actor Message Routing:Ascynronous state:
+    tamra_port      = tamra_port or 11520,
+    tamra_routes    = {},
+    subscribers     = {},
+  }
+end
 
-while chunk ~= nil do
-	contents = contents .. chunk
-	chunk = fs.read(fh, 8192)
-	scheduler.enqueue(scheduler.self())
-	coroutine.yield()
-end fs.close(fh)
+--[[ enqueue :: Readies an actor for processing
+type:       External
+params:     state:table, pid:number
+returns:    nil ]]
+function scheduler.enqueue(state, pid)
+  if state.actors[pid] == nil then return ':error', E_SCH_PIDNOEXIST end
+  table.insert(state.ready, pid)
+  return ':ok'
+end
 
-local ok, pid = scheduler.espawn(contents)
-if ok == ':ok' then
-	scheduler.enqueue(pid)
+--[[ spawn :: Spawns a new actor
+type:       External
+params:     state:table, code:string
+returns:    ok:string, pid:number ]]
+function scheduler.spawn(state, code)
+  ok, pid = find_pid(state)
+  if ok == ':error' then return ok, pid end
+  sandbox  = create_environment()
+  sandbox.self = pid
+
+  local chunk, errmsg = load(code, 'test', nil, sandbox)
+  actor = { co = coroutine.create(chunk), inbox = {} }
+  state.actors[pid] = actor
+  scheduler.enqueue(state, pid)
+
+  return ':ok', pid
+end
+
+--[[ dispatch :: dispatch an event to subscribed actors
+type:       External
+params:     state:table, event:table
+returns:    nil ]]
+function scheduler.dispatch(state, event)
+  local ev_name = event[1]
+  if state.subscribers[ev_name] == nil then return end
+
+  for pid, placevalue in pairs(state.subscribers[ev_name]) do
+      if type(placevalue) == 'function' then
+        local status, result = pcall(placevalue())
+        if status == true and result == true then
+          scheduler.send(pid, ':' .. ev_name, table.unpack(event))
+        end
+      else scheduler.send(pid, ':' .. ev_name, table.unpack(event))
+      end
+  end
+end
+
+--[[ run :: Run the scheduler
+type:       External
+params:     state:table
+returns:    nil ]]
+function scheduler.run(state, recent_pid, ...)
+  -- First: handle any coroutine that just ran:
+  if recent_pid ~= nil then co_handle_resume(state, recent_pid, ...) end
+
+  if not next(state.actors) then return ':error', E_SCH_NOACTORS end
+  scheduler.dispatch(state, table.pack(computer.pullSignal(0)) or {}) -- Dispatch incoming events
+
+  -- Run the next available actor:
+  if next(state.ready) then
+    local pid = table.remove(state.ready, 1)
+    local co  = state.actors[pid]['co']
+    return scheduler.run(state, pid, coroutine.resume(co))
+  end
+
+  return scheduler.run(state)
+end
+
+--[[ errstr :: Returns an error string for the specified error number
+type:       External
+params:     error number:number
+returns:    error string:string ]]
+function scheduler.errstr(errno) return errstr[errno] end
+
+_I = [==[
+while true do
+  yield()
 end
 ]==]
 
--- Main --
-
-local sched = scheduler()
-ok, pid = sched.espawn(init)
-if ok == ':ok' then
-	sched.enqueue(pid) 	-- Bootstrap init
-	sched.run()					-- Start the kernel scheduler
+-- AUTORUN --
+if _G['SCHEDULER_NOAUTORUN'] == nil then
+  local sched   = scheduler.build()
+  scheduler.spawn(sched, _I)
+  error, reason = scheduler.run(sched)
+  if error == ':error' then cprint('Trotwood panic: ' .. scheduler.errstr(reason)) end
 end
 
--- We define our callback helpers here so that both callback and the scheduler
--- are forward declared.
-
-function callback.spin()
-	local state			= nil
-	local callbacks	= {}
-
-	function callback.register_async(name, fn)
-		if callbacks[name] ~= nil then
-			return ':error', 'callback already exists'
-		end
-
-		callbacks[name] = { fn = fn }
-		return ':ok'
-	end
-
-	function callback.register_sync(name, fn)
-		local ok, errmsg = callback.register_async(name, fn)
-		if ok == ':error' then return ok, errmsg end
-		callbacks[name][sync] = true
-		return ':ok'
-	end
-
-	while true do
-		local msg = scheduler.recv()
-		if type(msg) == 'table' then
-			local hint     = msg[1]
-			local callback = msg[2]
-			local args     = msg[3] or {}
-			local source   = msg[4]
-			local tag      = msg[5]
-
-			if hint == ':callback' then
-				-- This is probably a callback. Proceed:
-				if callbacks[callback] ~= nil then
-					local retvals = table.pack( callbacks.callback['fn'](state, table.unpack(args)) )
-
-					-- Syncronous callbacks need return values:
-					if source ~= nil and callbacks.callback['sync'] ~= nil then
-						scheduler.send( source, {':callback-return', self(), callback, tag, retvals} )
-					end
-				end
-			end
-		end
-	end
-
-end
+return scheduler
