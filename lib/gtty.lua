@@ -8,7 +8,7 @@ local _T = {}
 type:       Internal
 params:     Nil
 returns:    Nil ]]
-local function ctrl_bel() if _T.beep == true then computer.beep(_T.beep_freq, _T.beep_length) end end
+local function ctrl_bel(terminal) if terminal.beep == true then computer.beep(terminal.beep_freq, terminal.beep_length) end end
 
 --[[ handle_ctrl :: Handles control characters
 type:       Internal
