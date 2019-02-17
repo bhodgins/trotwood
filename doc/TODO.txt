@@ -14,7 +14,7 @@
       [X] Actors                 100%
       [X] Environment sandboxing 100%
       [X] PID mapping            100%
-      [X] Messaging (IPC)         98%
+      [ ] Messaging (IPC)         98%
       [X] Scheduling             100%
       [X] ocvm compatability     100%
       [X] Boots without OC       100%
