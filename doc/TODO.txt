@@ -4,11 +4,13 @@
       [ ] Virtual File system (VFS)  10%
       [ ] OpenComputers Filesystem
       [ ] TrotwoodFS Filesystem
+      [?] computercraft filesystem    -%
 
   - [ ] Kernel core
       [ ] System header library   99%
       [ ] Yield calls             40%
       [ ] Realtime events          0%
+      [ ] Kernel (re)Execute       0%
       [X] Actors                 100%
       [X] Environment sandboxing 100%
       [X] PID mapping            100%
@@ -59,4 +61,11 @@
       [ ] Recursive routing
       [ ] GERT protocol family
       [ ] Minitel protocol
-      [ ] Copper protocol
+
+  - [ ] installation floppy medium
+      [ ] Installer
+      [ ] Live system
+
+  - [ ] Misc
+      [ ] Package system
+      [ ] Live online updates
