@@ -24,7 +24,8 @@
           [ ] Netboot EEPROM stub
 
       - [ ] Init system
-          [ ]
+          [ ] Default configuration file
+          [ ] Init actor
 
       - [ ] Libraries
           [ ] System header library  99%
