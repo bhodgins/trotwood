@@ -35,7 +35,8 @@
 
   - [ ] Misc Libraries
       [ ] File IO library       75%
-      [ ] CSV database library   0%
+      [ ] CSV database library
+      [ ] Device library
 
   - [ ] System clustering
       [ ] Auto-discovery
@@ -69,3 +70,4 @@
   - [ ] Misc
       [ ] Package system
       [ ] Live online updates
+      [ ] Remove Herobrine support

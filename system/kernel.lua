@@ -15,6 +15,11 @@ if print  ~= nil then cprint = print end         	-- Testing outside of OC
 if computer == nil then computer = { pullSignal = function() end } end
 local yield = coroutine.yield -- shorthand
 
+-- Host detection
+local _SYSTEM = component and "OpenComputers"                   or
+                string.match(_HOST      or "", "ComputerCraft") or
+                "UNKNOWN"
+
 -- SCHEDULER --
 
 local scheduler = {}

@@ -1,5 +1,9 @@
 local _SYS = {}
 
+_SYS.HOST_OC    = "OpenComputers"
+_SYS.HOST_CC    = "ComputerCraft"
+_SYS.HOST_OTHER = "UNKNOWN"
+
 --[[
 Yield calls provide a means to communicate with the scheduler without having
 access to the scheduler's environment directly. It also helps ensure that
