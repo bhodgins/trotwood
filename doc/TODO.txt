@@ -1,0 +1,31 @@
+[ ] Trotwood
+  - [ ] Drivers
+      [ ] GPU terminal driver 'gtty' 90%
+      [ ] Virtual File system (VFS)  10%
+      [ ] OpenComputers Filesystem
+      [ ] TrotwoodFS Filesystem
+
+  - [ ] Features
+      - [ ] Kernel core
+          [ ] Yield calls             40%
+          [X] Actors                 100%
+          [X] Environment sandboxing 100%
+          [X] PID mapping            100%
+          [X] Messaging (IPC)         98%
+          [X] Scheduling             100%
+          [X] ocvm compatability     100%
+          [X] Boots without OC       100%
+
+      - [ ] Boot loader
+          [ ] EEPROM base stub
+          [ ] init.lua OCFS stub
+          [ ] Module support
+          [ ] TWFS binary Filesystem bootable
+          [ ] Netboot EEPROM stub
+
+      - [ ] Init system
+          [ ]
+
+      - [ ] Libraries
+          [ ] System header library  99%
+          [ ] File header library    75%
