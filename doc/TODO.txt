@@ -5,28 +5,57 @@
       [ ] OpenComputers Filesystem
       [ ] TrotwoodFS Filesystem
 
-  - [ ] Features
-      - [ ] Kernel core
-          [ ] Yield calls             40%
-          [X] Actors                 100%
-          [X] Environment sandboxing 100%
-          [X] PID mapping            100%
-          [X] Messaging (IPC)         98%
-          [X] Scheduling             100%
-          [X] ocvm compatability     100%
-          [X] Boots without OC       100%
+  - [ ] Kernel core
+      [ ] System header library   99%
+      [ ] Yield calls             40%
+      [X] Actors                 100%
+      [X] Environment sandboxing 100%
+      [X] PID mapping            100%
+      [X] Messaging (IPC)         98%
+      [X] Scheduling             100%
+      [X] ocvm compatability     100%
+      [X] Boots without OC       100%
+      [?] Computercraft compat     -%
 
-      - [ ] Boot loader
-          [ ] EEPROM base stub
-          [ ] init.lua OCFS stub
-          [ ] Module support
-          [ ] TWFS binary Filesystem bootable
-          [ ] Netboot EEPROM stub
+  - [ ] Boot loader
+      [ ] EEPROM base stub
+      [ ] init.lua OCFS stub
+      [ ] Module support
+      [ ] TWFS binary Filesystem bootable
+      [ ] OC Netboot EEPROM stub
+      [?] Computercraft fs boot
+      [?] Computercraft netboot
 
-      - [ ] Init system
-          [ ] Default configuration file
-          [ ] Init actor
+  - [ ] Init system
+      [ ] Default configuration file
+      [ ] Init actor
 
-      - [ ] Libraries
-          [ ] System header library  99%
-          [ ] File header library    75%
+  - [ ] Misc Libraries
+      [ ] File IO library       75%
+      [ ] CSV database library   0%
+
+  - [ ] System clustering
+      [ ] Auto-discovery
+      [ ] Cluster identification
+      [ ] Event message router
+      [ ] Cluster spawn control
+      [ ] Zoning of cluster areas
+
+  - [ ] User interface
+      [ ] Lua driven outer shell library
+      - [ ] Shell overlays
+          [ ] Base overlay
+          [ ] Route overlay
+          [ ] Station overlay
+          [ ] Log overlay
+          [ ] Cluster overlay
+          [ ] Trouble overlay
+
+  - [ ] Networking
+      [ ] Networking interface library
+      [ ] Medium independent interface support
+      [ ] Trotwood Signaling System v.1 (TSS1)
+      [ ] Recursive routing
+      [ ] GERT protocol family
+      [ ] Minitel protocol
+      [ ] Copper protocol
