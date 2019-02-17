@@ -8,6 +8,7 @@
   - [ ] Kernel core
       [ ] System header library   99%
       [ ] Yield calls             40%
+      [ ] Realtime events          0%
       [X] Actors                 100%
       [X] Environment sandboxing 100%
       [X] PID mapping            100%
