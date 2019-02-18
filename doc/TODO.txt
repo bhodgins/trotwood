@@ -18,7 +18,7 @@
       [X] Scheduling             100%
       [X] ocvm compatability     100%
       [X] Boots without OC       100%
-      [?] Computercraft compat     -%
+      [?] Computercraft support    -%
 
   - [ ] Boot loader
       [ ] EEPROM base stub

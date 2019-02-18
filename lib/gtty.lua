@@ -137,17 +137,3 @@ end
 function _T.put(terminal, data) return process(terminal, tokenize(data, {})) end
 
 return _T
-
---[[
--- Screen wrapping / scrolling:
-if terminal.pos_x > terminal.max_x then
-  if terminal.pos_y >= terminal.max_y then scroll(terminal)
-  else terminal.pos_y = terminal.pos_y + 1 end
-  terminal.pos_x = 1
-end
-]]
-
---[[
-g = require("gtty")
-t = gtty.build(component.proxy(component.list('gpu')()))
-]]
