@@ -23,9 +23,10 @@ returns:    any ]]
 function require(file)
   local fh      = ocfs.open(file)
   local content = slurp(fh, "")
-  local result, err = pcall(content)
-  error(err, 2)
-  assert(result, error)
+  local chunk = load(content, file)
+  local result, err = pcall(chunk)
+
+  if result == false then error(err) return nil end
 
   return result
 end
