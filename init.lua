@@ -1,6 +1,7 @@
 -- init.lua - OCFS boot compatability for Trotwood
 
 local ocfs = component.proxy(computer.getBootAddress())
+SCHEDULER_NOAUTORUN = true
 
 local function send(co, ...)
   -- TODO
@@ -16,6 +17,15 @@ local function slurp(fh, acc)
   return acc
 end
 
+--[[ absorb :: slurp, but by filename
+type:       Internal
+params:     file:string
+returns:    file:string ]]
+local function absorb(file)
+  local fh = ocfs.open(file)
+  return slurp(fh, "")
+end
+
 --[[ require :: requires a Lua source file
 type:       Implied
 params:     file:string
@@ -23,19 +33,20 @@ returns:    any ]]
 function require(file)
   local fh      = ocfs.open(file)
   local content = slurp(fh, "")
-  local chunk = load(content, file)
-  local result, err = pcall(chunk)
+  local chunk, err = load(content, file)
+  assert(chunk, err)
 
-  if result == false then error(err) return nil end
-
-  return result
+  return chunk()
 end
 
 local kernel = require('system/kernel.lua')
 
-while true do
-  coroutine.yield()
-end
+local kinstance = kernel.build()
+local sysinit = absorb('system/sysinit.lua')
+local ok, pid = kernel.spawn(kinstance, sysinit)
+
+local ok, err = kernel.run(kinstance)
+assert(ok == ':ok', err)
 
 --[[
 

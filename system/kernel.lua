@@ -47,7 +47,7 @@ local function find_pid(state)
     return ':ok', table.remove(state.free_pids, 1)
   end
   -- Return a new PID, if the cap is not met:
-  if state.pid_max == state.last_new_pid then return ':error', E_SCH_NOPIDS end
+  if state.pid_max == state.last_new_pid then return ':error', sys.errstr(sys.E_SCH_NOPIDS) end
   return ':ok', state.last_new_pid + 1
 end
 
@@ -129,7 +129,7 @@ function scheduler.run(state, recent_pid, ...)
   -- First: handle any coroutine that just ran:
   if recent_pid ~= nil then co_handle_resume(state, recent_pid, ...) end
 
-  if not next(state.actors) then return ':error', E_SCH_NOACTORS end
+  if not next(state.actors) then return ':error', sys.errstr(sys.E_SCH_NOACTORS) end
   scheduler.dispatch(state, table.pack(computer.pullSignal(0)) or {}) -- Dispatch incoming events
 
   -- Run the next available actor:
@@ -141,12 +141,6 @@ function scheduler.run(state, recent_pid, ...)
 
   return scheduler.run(state)
 end
-
---[[ errstr :: Returns an error string for the specified error number
-type:       External
-params:     error number:number
-returns:    error string:string ]]
-function scheduler.errstr(errno) return errstr[errno] end
 
 -- AUTORUN --
 if _G['SCHEDULER_NOAUTORUN'] == nil then

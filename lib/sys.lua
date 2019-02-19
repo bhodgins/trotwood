@@ -27,13 +27,13 @@ _SYS.YC_SPWN = 140
 _SYS.YC_SUB  = 150
 _SYS.YC_USUB = 160
 
-function _SYS.quit   = function()         yield(_SYS.YC_QUIT)           end
-function _SYS.send   = function(pid, ...) yield(_SYS.YC_SEND, pid, ...) end
-function _SYS.wake   = function(pid)      yield(_SYS.YC_WUP,  pid)      end
-function _SYS.recv   = function()         yield(_SYS.YC_RECV)           end
-function _SYS.sub    = function(event)    yield(_SYS.YC_SUB, event, fn) end
-function _SYS.unsub  = function(event)    yield(_SYS.YC_USUB, event)    end
-function _SYS.spawn  = function(code, sopts, ...) yield(_SYS.YC_SPWN, code, sopts, ...) end
+function _SYS.quit()                  yield(_SYS.YC_QUIT)                   end
+function _SYS.send(pid, ...)          yield(_SYS.YC_SEND, pid, ...)         end
+function _SYS.wake(pid)               yield(_SYS.YC_WUP,  pid)              end
+function _SYS.recv()                  yield(_SYS.YC_RECV)                   end
+function _SYS.sub(event)              yield(_SYS.YC_SUB, event, fn)         end
+function _SYS.unsub(event)            yield(_SYS.YC_USUB, event)            end
+function _SYS.spawn(code, sopts, ...) yield(_SYS.YC_SPWN, code, sopts, ...) end
 
 -- ERRORS --
 
@@ -41,9 +41,13 @@ _SYS.E_SCH_PIDNOEXIST = 100
 _SYS.E_SCH_NOACTORS   = 110
 _SYS.E_SCH_NOPIDS     = 120
 
+--[[ errstr :: Returns an error string for the specified error number
+type:       External
+params:     error number:number
+returns:    error string:string ]]
 function _SYS.errstr(e)
   return ({
-  'No such PID'
+  'No such PID',
   'All actors have halted',
   'PID count exhausted',
 })[(e / 10) - 9]
