@@ -30,14 +30,25 @@ end
 type:       Implied
 params:     file:string
 returns:    any ]]
+--[[ require :: requires a Lua source file
+type:       Implied
+params:     file:string
+returns:    OK:string, result:any | ERROR:string, errstr:string ]]
 function require(file)
-  local fh      = ocfs.open(file)
-  local content = slurp(fh, "")
+  if exists(file) ~= true then
+    if exists(file .. '.lua') then file = file .. 'lua'
+    else return ':error', 'No such file or directory' end
+  end
+
+  if string.find(file, '.') == nil then file = file .. '.lua' end
+  local fh      = fiostub.open(file)
+  local content = fiostub.slurp(fh, "")
   local chunk, err = load(content, file)
-  assert(chunk, err)
+  if chunk == nil then return ':error', err end
 
   return chunk()
 end
+
 
 local kernel = require('system/kernel.lua')
 
