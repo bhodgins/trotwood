@@ -61,9 +61,9 @@ end
 
 --[[ build :: Builds and returns a new scheduler state table
 type:       External
-params:     max pid*:number, tamra_port*:number
+params:     pid_max:number
 returns:    scheduler:table ]]
-function scheduler.build(pid_max, tamra_port)
+function scheduler.build(pid_max)
   return {
     actors          = {},
     ready           = {},

@@ -1,5 +1,15 @@
 local _SYS = {}
 
+-- ERRORS:
+local er = require('lib/error')
+
+_SYS = er.errify(_SYS, {
+  _SYS.E_SCH_PIDNOEXIST = 'No such PID',
+  _SYS.E_SCH_NOACTORS   = 'All actors have halted',
+  _SYS.E_SCH_NOPIDS     = 'PID count exhausted',
+})
+
+-- Host constants:
 _SYS.HOST_OC    = "OpenComputers"
 _SYS.HOST_CC    = "ComputerCraft"
 _SYS.HOST_OTHER = "UNKNOWN"
@@ -34,23 +44,5 @@ function _SYS.recv()                  yield(_SYS.YC_RECV)                   end
 function _SYS.sub(event)              yield(_SYS.YC_SUB, event, fn)         end
 function _SYS.unsub(event)            yield(_SYS.YC_USUB, event)            end
 function _SYS.spawn(code, sopts, ...) yield(_SYS.YC_SPWN, code, sopts, ...) end
-
--- ERRORS --
-
-_SYS.E_SCH_PIDNOEXIST = 100
-_SYS.E_SCH_NOACTORS   = 110
-_SYS.E_SCH_NOPIDS     = 120
-
---[[ errstr :: Returns an error string for the specified error number
-type:       External
-params:     error number:number
-returns:    error string:string ]]
-function _SYS.errstr(e)
-  return ({
-  'No such PID',
-  'All actors have halted',
-  'PID count exhausted',
-})[(e / 10) - 9]
-end
 
 return _SYS
