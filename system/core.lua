@@ -50,7 +50,8 @@ local function create_environment()
     math			  = math,             spawn       = yc_spawn,
     coroutine	  = coroutine,        cprint		  = cprint,
     callback    = callback,         component   = component,
-    self        = 0,                require     = require,
+    _SELF       = 0,                require     = require,
+    _SYSTEM     = _SYSTEM,          string      = string,
   }
 end
 
@@ -77,7 +78,7 @@ function _C.spawn(state, code)
   sandbox  = create_environment()
   for k, _ in pairs(sandbox) do print(k) end
   print("spawning pid " .. pid)
-  sandbox.self = pid
+  sandbox._SELF = pid
 
   local chunk, errmsg = load(code, 'test', nil, sandbox)
   actor = coroutine.create(chunk) -- Note: Inboxes have been moved to the scheduler
@@ -126,7 +127,7 @@ local function _run(state, sched, recent_pid, ...)
   -- Run the next available actor:
   local pid, events = table.unpack(scheduler.next_actor(sched))
   if pid then
-    return _run(state, sched, pid, coroutine.resume(state.actors[pid], event))
+    return yield(_run(state, sched, pid, coroutine.resume(state.actors[pid], event)))
   end
 
   return _run(state, sched)
