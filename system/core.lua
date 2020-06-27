@@ -94,7 +94,10 @@ params:     state:table, sched:table, recent_pid:number, co_status:boolean,
   ...:list
 returns:    state:table ]]
 local function co_handle_resume(state, sched, recent_pid, co_status, ...)
-
+  if co_status == false then
+    print("actor with pid " .. recent_pid .. " has crashed! error message:")
+    print(...)
+  end
 end
 
 --[[ build :: Build the core
