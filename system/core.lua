@@ -10,8 +10,6 @@ Please read LICENSE in the root repository directory before editing.
 THIS FILE REQUIRES FILEIO STUBS IN ORDER TO BOOTSTRAP TROTWOOD.
 ]]
 
-local _C = {}
-
 local PID_MAX = 1000
 local _SYSTEM = component and "OpenComputers"                   or
                 string.match(_HOST      or "", "ComputerCraft") or
@@ -69,10 +67,9 @@ local function find_pid(state)
 end
 
 --[[ spawn :: Spawns a new actor
-type:       External
 params:     state:table, code:string
 returns:    ok:string, pid:number ]]
-function _C.spawn(state, code)
+local function spawn(state, code)
   ok, pid = find_pid(state)
   if ok == ':error' then return ok, pid end
   sandbox  = create_environment()
@@ -101,10 +98,9 @@ local function co_handle_resume(state, sched, recent_pid, co_status, ...)
 end
 
 --[[ build :: Build the core
-type:       External
 params:     nil
 returns:    state:table ]]
-function _C.build(max_pid)
+local function build(max_pid)
   max_pid = pid_max or PID_MAX
   return {
     free_pids       = {},
@@ -142,9 +138,13 @@ end
 type:       External
 params:     state:table
 returns:    nil ]]
-function _C.run(state, sched, recent_pid, ...)
+local function run(state, sched, recent_pid, ...)
   local state = state or _C.build(1000)
   return _run(state, state.sched)
 end
 
-return _C
+return {
+  spawn   = spawn,
+  build   = build,
+  run     = run,
+}
