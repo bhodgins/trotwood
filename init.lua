@@ -7,6 +7,13 @@ _SYSTEM = component and "OpenComputers" or
   "UNKNOWN"
 
 if _SYSTEM == "UNKNOWN" then stub = require('stub/standard') end
+if _SYSTEM == "OpenComputers" then
+  if _OSVERSION ~= nil then
+    if string.find(_OSVERSION, "OpenOS") ~= nil then
+      stub = require('stub/oc')
+    end
+  end
+end
 
 local core = stub.require('system://core')
 local initial_state = core.build(1000)
