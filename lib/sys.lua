@@ -4,9 +4,9 @@ local _SYS = {}
 local er = require('lib/error')
 
 _SYS = er.errify(_SYS, {
-  _SYS.E_CORE_PIDNOEXIST = 'No such PID',
-  _SYS.E_CORE_NOACTORS   = 'All actors have halted',
-  _SYS.E_CORE_NOPIDS     = 'PID count exhausted',
+  ['E_CORE_PIDNOEXIST'] = 'No such PID',
+  ['E_CORE_NOACTORS']   = 'All actors have halted',
+  ['E_CORE_NOPIDS']     = 'PID count exhausted',
 })
 
 -- Host constants:

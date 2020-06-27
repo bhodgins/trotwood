@@ -25,8 +25,8 @@ local yield = coroutine.yield -- shorthand
 
 
 -- some external files we need:
-local scheduler = fiostub.require('system://scheduler')
-local sys       = fiostub.require('lib://sys')
+local scheduler = stub.require('system://scheduler')
+local sys       = stub.require('lib://sys')
 
 -- Environment modifications --
 
@@ -45,13 +45,13 @@ type:       Internal
 params:     nil
 returns:    senvironment:table ]]
 local function create_environment()
-  return table.byval({
+  return {
     os          = os,               table			  = table,
     math			  = math,             spawn       = yc_spawn,
     coroutine	  = coroutine,        cprint		  = cprint,
     callback    = callback,         component   = component,
     self        = 0,                require     = require,
-  })
+  }
 end
 
 --[[ find_pid :: Finds an available PID
@@ -67,30 +67,22 @@ local function find_pid(state)
   return ':ok', state.last_new_pid + 1
 end
 
---[[ enqueue :: Readies an actor for processing
-type:       External
-params:     state:table, pid:number
-returns:    nil ]]
-function scheduler.enqueue(state, pid)
-  if state.actors[pid] == nil then return ':error', sys.E_CORE_PIDNOEXIST end
-  table.insert(state.ready, pid)
-  return ':ok'
-end
-
 --[[ spawn :: Spawns a new actor
 type:       External
 params:     state:table, code:string
 returns:    ok:string, pid:number ]]
-function spawn(state, code)
+function _C.spawn(state, code)
   ok, pid = find_pid(state)
   if ok == ':error' then return ok, pid end
   sandbox  = create_environment()
+  for k, _ in pairs(sandbox) do print(k) end
+  print("spawning pid " .. pid)
   sandbox.self = pid
 
   local chunk, errmsg = load(code, 'test', nil, sandbox)
-  actor = { co = coroutine.create(chunk), inbox = {} }
+  actor = coroutine.create(chunk) -- Note: Inboxes have been moved to the scheduler
   state.actors[pid] = actor
-  enqueue(state, pid)
+  scheduler.enqueue(state.sched, pid)
 
   return ':ok', pid
 end
@@ -115,7 +107,29 @@ function _C.build(max_pid)
     actors          = {},
     last_new_pid    = 0,
     pid_max         = max_pid,
+    sched           = scheduler.build()
   }
+end
+
+--[[ _run :: Run the core
+type:       Internal
+params:     state:table, sched:scheduler, recent_pid:number, ...:any
+returns:    nil ]]
+local function _run(state, sched, recent_pid, ...)
+  -- First: handle any coroutine that just ran:
+  if recent_pid ~= nil then co_handle_resume(state, sched, recent_pid, ...) end
+
+  if not next(state.actors) then return ':error', sys.E_CORE_NOACTORS end
+  local event = stub.get_event()
+  if event ~= nil then scheduler.pub(sched, event) end
+
+  -- Run the next available actor:
+  local pid, events = table.unpack(scheduler.next_actor(sched))
+  if pid then
+    return _run(state, sched, pid, coroutine.resume(state.actors[pid], event))
+  end
+
+  return _run(state, sched)
 end
 
 --[[ run :: Run the core
@@ -123,18 +137,8 @@ type:       External
 params:     state:table
 returns:    nil ]]
 function _C.run(state, sched, recent_pid, ...)
-  -- First: handle any coroutine that just ran:
-  if recent_pid ~= nil then co_handle_resume(state, sched, recent_pid, ...) end
-
-  if not next(state.actors) then return ':error', sys.E_CORE_NOACTORS end
-  sched.dispatch(sched, table.pack(computer.pullSignal(0)) or {})
-
-  -- Run the next available actor:
-  local pid, event = sched.next_actor()
-  if pid then
-    local actor  = state.actors[pid]['co']
-    return run(sched, sched, pid, coroutine.resume(actor, event))
-  end
-
-  return run(state, sched)
+  local state = state or _C.build(1000)
+  return _run(state, state.sched)
 end
+
+return _C

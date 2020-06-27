@@ -1,37 +1,48 @@
 -- system/_S.lua :: Trotwood scheduler
 
-local _S = {}
-local sys       = fiostub.require('lib://sys')
+local sys       = stub.require('lib://sys')
+
+--[[ enqueue :: Readies an actor for processing
+params:     state:table, pid:number
+returns:    nil ]]
+local function enqueue(state, pid)
+  table.insert(state.ready, {pid, {}})
+  return ':ok'
+end
 
 --[[ handle_yieldcall :: Builds and returns a new _S state table
 type:       Internal
 params:     pid_max:number
 returns:    _S:table ]]
 local function handle_yieldcall(state, event)
-  
+
 end
 
 --[[ sub :: Subscribes an actor to an event
-type:       External
 params:     pid:number, event_name:string
 returns:    OK:string | ERROR:string, errno:number ]]
-function _S.sub(state, pid, event_name)
-
+local function sub(state, pid, event_name)
+  ev = state.subscribers[event_name]
+  if ev ~= nil then return ':ok', table.insert(ev, pid) end
+  state.subscribers[event_name] = { pid }
+  return ':ok'
 end
 
 --[[ unsub :: Ubsubscribes an actor from an event
-type:       External
 params:     pid:number, event:string
 returns:    OK:string | ERROR:string, errno:number ]]
-function _S.unsub(state, pid, event_name)
-
+local function unsub(state, pid, event_name, _acc)
+  local ev = state.subscribers[event_name]
+  if ev == nil then return ':error' end
+  
+  local ev = fnutil.filter(ev, function(sub_pid)if sub_pid ~= pid then return true end end)
+  return ':ok'
 end
 
 --[[ build :: Builds and returns a new _S state table
-type:       External
 params:     nil
 returns:    _S:table ]]
-function _S.build()
+local function build()
   return {
     ready           = {},
     subscribers     = {},
@@ -39,32 +50,39 @@ function _S.build()
 end
 
 --[[ next_actor :: Returns the next actor ready for processing
-type:       External
 params:     nil
 returns:    actor:pid, event:list ]]
-function _S.next_actor()
-
+local function next_actor(state)
+  local _a = table.remove(state.ready, 1)
+  if _a == nil then return {nil, nil} end
+  return _a
 end
 
 --[[ pub :: Publish an event to subscribed actors
-type:       External
 params:     state:table, event:table
 returns:    nil ]]
-function _S.pub(state, event)
+local function pub(state, event)
   local ev_name = event[1]
-  if ev_name:sub(1, 1) == ':' then return handle_yieldcall(state, event) end
+  -- if ev_name:sub(1, 1) == ':' then return handle_yieldcall(state, event) end
 
   if state.subscribers[ev_name] == nil then return end
 
-  for pid, placevalue in pairs(state.subscribers[ev_name]) do
-      if type(placevalue) == 'function' then
-        local status, result = pcall(placevalue())
-        if status == true and result == true then
-          _S.send(pid, ':' .. ev_name, table.unpack(event))
-        end
-      else _S.send(pid, ':' .. ev_name, table.unpack(event))
-      end
+  for pid, _ in pairs(state.subscribers[ev_name]) do
+    local i = find_index(state.ready, function(e) return e[1] == pid end)
+
+    -- Just throw it on if the actor isn't already ready:
+    if i == nil then table.insert(state.ready, {pid, {event}}) end
+
+    -- Actor is already in a ready state, append to event queue:
+    table.insert(state.ready[i][2], event)
   end
 end
 
-return _S
+return {
+  pub         = pub,
+  next_actor  = next_actor,
+  build       = build,
+  unsub       = unsub,
+  sub         = sub,
+  enqueue     = enqueue,
+}
