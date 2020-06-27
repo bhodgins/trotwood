@@ -117,6 +117,8 @@ type:       Internal
 params:     state:table, sched:scheduler, recent_pid:number, ...:any
 returns:    nil ]]
 local function _run(state, sched, recent_pid, ...)
+  if _SYSTEM ~= "UNKNOWN" then yield() end
+
   -- First: handle any coroutine that just ran:
   if recent_pid ~= nil then co_handle_resume(state, sched, recent_pid, ...) end
 
@@ -127,7 +129,7 @@ local function _run(state, sched, recent_pid, ...)
   -- Run the next available actor:
   local pid, events = table.unpack(scheduler.next_actor(sched))
   if pid then
-    return yield(_run(state, sched, pid, coroutine.resume(state.actors[pid], event)))
+    return _run(state, sched, pid, coroutine.resume(state.actors[pid], event))
   end
 
   return _run(state, sched)
