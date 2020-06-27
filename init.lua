@@ -3,7 +3,7 @@
 yield = coroutine.yield -- shorthand
 
 _SYSTEM = component and "OpenComputers" or
-  string.match(_HOST      or "", "ComputerCraft") or
+  string.match(_HOST or "", "ComputerCraft") or
   "UNKNOWN"
 
 if _SYSTEM == "UNKNOWN" then stub = require('stub/standard') end
